@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>כמה פריטים יש? - מעבדת גרירה</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Assistant:wght@300;400;700;800&display=swap');
+        
+        body {
+            font-family: 'Assistant', sans-serif;
+            background-color: #FDFBF7;
+            user-select: none;
+            overflow: hidden;
+            touch-action: none; 
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .group-container {
+            cursor: grab;
+            transition: transform 0.1s ease;
+            touch-action: none;
+        }
+
+        .group-container:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+            z-index: 50;
+        }
+
+        .animate-pop { animation: pop 0.3s cubic-bezier(0.17, 0.67, 0.83, 0.67); }
+        @keyframes pop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .canvas-area {
+            background-image: radial-gradient(#e5e7eb 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .number-input-container {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 4px solid #FFEDD5;
+            border-radius: 3rem;
+            padding: 0.5rem 1.5rem;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .number-input-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-left: 20px;
+            border-left: 2px solid #f3f4f6;
+        }
+
+        .control-btn {
+            color: #94a3b8;
+            cursor: pointer;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-btn:hover { color: #f97316; }
+        .control-btn:active { transform: scale(0.9); }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        .teacher-hint {
+            animation: bounce-x 2s infinite;
+        }
+
+        @keyframes bounce-x {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(-5px); }
+        }
+
+        .spin-on-click:active i {
+            transform: rotate(180deg);
+            transition: transform 0.3s;
+        }
+    </style>
+</head>
+<body class="p-2 md:p-6" id="mainBody">
+
+    <!-- Header -->
+    <header class="w-full max-w-6xl mx-auto flex justify-between items-center mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg transform -rotate-3">
+                <div class="w-4 h-4 bg-white rounded-full"></div>
+            </div>
+            <div>
+                <h1 class="text-xl md:text-2xl font-black text-gray-800 leading-none text-right">כמה פריטים יש?</h1>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="toggleFullScreen()" class="p-3 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-blue-500 transition-all shadow-sm flex items-center justify-center" title="מסך מלא">
+                <i data-lucide="maximize" class="w-5 h-5" id="fsIcon"></i>
+            </button>
+            <button onclick="resetToStart()" class="p-3 bg-white border border-gray-200 rounded-xl text-gray-400 hover:text-orange-500 transition-all shadow-sm flex items-center justify-center" title="בית">
+                <i data-lucide="home" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main id="appContainer" class="w-full max-w-6xl mx-auto bg-white rounded-[2rem] shadow-2xl border border-orange-100 overflow-hidden flex flex-col h-[75vh] relative mb-4">
+        
+        <!-- SETUP SCREEN -->
+        <div id="setupScreen" class="flex-1 flex flex-col p-4 md:p-6 space-y-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 bg-gray-50 p-4 rounded-3xl border border-gray-100">
+                <div>
+                    <label class="block text-gray-500 font-bold text-xs mb-1">פריטים בקבוצה:</label>
+                    <select id="groupSize" onchange="initLab()" class="w-full p-2 rounded-xl border-2 border-gray-200 font-black text-lg outline-none focus:border-orange-300">
+                        <!-- Options generated by script -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-500 font-bold text-xs mb-1">כמה קבוצות:</label>
+                    <select id="numGroups" onchange="initLab()" class="w-full p-2 rounded-xl border-2 border-gray-200 font-black text-lg outline-none focus:border-orange-300">
+                        <!-- Options generated by script -->
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="toggleLayoutMode()" class="flex-1 h-11 bg-white border-2 border-blue-100 text-blue-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-50 transition-all">
+                        <i data-lucide="layout-grid" class="w-4 h-4" id="layoutIcon"></i>
+                        <span id="layoutText">סדר: קובייה</span>
+                    </button>
+                    <button id="shuffleBtn" onclick="refreshAllInternalLayouts()" class="hidden h-11 w-11 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center hover:bg-blue-200 transition-all spin-on-click" title="הגרל סידור אקראי חדש">
+                        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="flex flex-col justify-end">
+                    <button onclick="startShow()" class="h-11 bg-orange-500 text-white rounded-xl font-black text-lg shadow-lg hover:bg-orange-600 transition-all">
+                        הצג לתלמידים
+                    </button>
+                </div>
+            </div>
+
+            <!-- Workspace -->
+            <div class="flex-1 flex flex-col space-y-2">
+                <div class="flex items-center gap-2 text-blue-500 bg-blue-50/50 self-start px-4 py-1.5 rounded-full border border-blue-100">
+                    <i data-lucide="hand" class="w-4 h-4 teacher-hint"></i>
+                    <span class="text-sm font-bold">מורה, ניתן לגרור את הקבוצות למקום הרצוי</span>
+                </div>
+                <div id="workspace" class="flex-1 bg-white border-2 border-dashed border-gray-200 rounded-[2rem] relative overflow-hidden canvas-area"></div>
+            </div>
+        </div>
+
+        <!-- PLAY SCREEN -->
+        <div id="playScreen" class="hidden flex-1 flex flex-col bg-white">
+            <div id="playCanvas" class="flex-1 relative overflow-hidden"></div>
+            <div class="p-6 bg-gray-50 border-t border-gray-100 flex justify-between items-center px-8">
+                <div class="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-gray-200 shadow-sm">
+                    <i data-lucide="clock" class="w-5 h-5 text-orange-500"></i>
+                    <span id="stopwatchText" class="font-black text-2xl text-gray-700 font-mono">00:00</span>
+                </div>
+                <button onclick="hideAndAsk()" class="bg-gray-900 text-white px-12 py-4 rounded-2xl font-black text-xl shadow-xl flex items-center gap-3 hover:bg-black transition-all transform active:scale-95">
+                    <i data-lucide="eye-off" class="w-6 h-6"></i>
+                    הסתר עכשיו
+                </button>
+                <div class="text-gray-400 text-sm font-bold text-left">
+                    בקרת מורה
+                </div>
+            </div>
+        </div>
+
+        <!-- ASKING SCREEN -->
+        <div id="askingScreen" class="hidden flex-1 flex flex-col items-center justify-center p-8 space-y-10 animate-pop">
+            <h2 class="text-4xl font-black text-gray-800 text-center">כמה פריטים ראיתם?</h2>
+            
+            <div class="number-input-container">
+                <div class="number-input-controls">
+                    <div class="control-btn" onclick="adjustValue(1)"><i data-lucide="chevron-up" class="w-8 h-8"></i></div>
+                    <div class="control-btn" onclick="adjustValue(-1)"><i data-lucide="chevron-down" class="w-8 h-8"></i></div>
+                </div>
+                <input id="answerInput" type="number" class="w-48 h-32 text-center text-7xl font-black outline-none bg-transparent" value="0" min="0">
+            </div>
+
+            <div id="feedback" class="hidden px-8 py-4 rounded-2xl font-black text-xl"></div>
+            
+            <div class="flex gap-4">
+                <button onclick="checkAnswer()" class="bg-orange-500 text-white px-16 py-5 rounded-2xl font-black text-2xl shadow-lg hover:bg-orange-600 transition-all transform active:scale-95">בדיקה</button>
+                <button onclick="showAgain()" class="bg-white border-2 border-gray-200 text-blue-600 px-10 py-5 rounded-2xl font-black flex items-center gap-2 hover:bg-gray-50 transition-all">
+                    <i data-lucide="eye" class="w-5 h-5"></i>
+                    הצג שוב
+                </button>
+            </div>
+            
+            <button onclick="resetToStart()" class="text-gray-400 font-bold hover:text-gray-600 transition-colors">חזרה לעריכת מערך</button>
+        </div>
+    </main>
+
+    <!-- Footer Credit -->
+    <footer class="w-full text-center py-2 text-gray-500 font-medium">
+        <div class="flex items-center justify-center gap-1 text-sm md:text-base">
+            <span dir="ltr">©</span>
+            <span>למידה דרך חוויה - ד"ר ענת פלדמן</span>
+        </div>
+    </footer>
+
+    <script>
+        let groups = [];
+        let groupSize = 5;
+        let numGroups = 6;
+        let currentColor = '#3B82F6';
+        let activeElement = null;
+        let offset = { x: 0, y: 0 };
+        let layoutMode = 'dice';
+        let stopwatchInterval = null;
+        let startTime = 0;
+
+        const COLORS = ['#EC4899', '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+
+        function populateSelects() {
+            const sizeSelect = document.getElementById('groupSize');
+            const numSelect = document.getElementById('numGroups');
+            
+            for(let i=1; i<=10; i++) {
+                const optSize = document.createElement('option');
+                optSize.value = i;
+                optSize.innerText = i;
+                if(i === 5) optSize.selected = true;
+                sizeSelect.appendChild(optSize);
+
+                const optNum = document.createElement('option');
+                optNum.value = i;
+                optNum.innerText = i;
+                if(i === 6) optNum.selected = true;
+                numSelect.appendChild(optNum);
+            }
+        }
+
+        function initLab() {
+            groupSize = parseInt(document.getElementById('groupSize').value);
+            numGroups = parseInt(document.getElementById('numGroups').value);
+            currentColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+            const workspace = document.getElementById('workspace');
+            workspace.innerHTML = '';
+            groups = [];
+            const cols = 4;
+            const gap = 160;
+            for(let i=0; i<numGroups; i++) {
+                const x = 50 + (i % cols) * gap;
+                const y = 50 + Math.floor(i / cols) * gap;
+                createGroupElement(i, x, y);
+            }
+            lucide.createIcons();
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.error(`Error full-screen: ${err.message}`);
+                });
+                document.getElementById('fsIcon').setAttribute('data-lucide', 'minimize');
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                    document.getElementById('fsIcon').setAttribute('data-lucide', 'maximize');
+                }
+            }
+            lucide.createIcons();
+        }
+
+        function adjustValue(delta) {
+            const input = document.getElementById('answerInput');
+            let val = parseInt(input.value) || 0;
+            val = Math.max(0, val + delta); 
+            input.value = val;
+        }
+
+        function toggleLayoutMode() {
+            layoutMode = layoutMode === 'dice' ? 'random' : 'dice';
+            document.getElementById('layoutText').innerText = layoutMode === 'dice' ? 'סדר: קובייה' : 'סדר: אקראי';
+            document.getElementById('layoutIcon').setAttribute('data-lucide', layoutMode === 'dice' ? 'layout-grid' : 'shuffle');
+            
+            const shuffleBtn = document.getElementById('shuffleBtn');
+            if(layoutMode === 'random') {
+                shuffleBtn.classList.remove('hidden');
+            } else {
+                shuffleBtn.classList.add('hidden');
+            }
+            
+            lucide.createIcons();
+            refreshAllInternalLayouts();
+        }
+
+        function generateDicePoints(count) {
+            const points = [];
+            const s = 28;
+            if (count === 1) points.push({x:0, y:0});
+            else if (count === 2) points.push({x:-s, y:-s}, {x:s, y:s});
+            else if (count === 3) points.push({x:-s, y:-s}, {x:0, y:0}, {x:s, y:s});
+            else if (count === 4) points.push({x:-s, y:-s}, {x:s, y:-s}, {x:-s, y:s}, {x:s, y:s});
+            else if (count === 5) points.push({x:-s, y:-s}, {x:s, y:-s}, {x:0, y:0}, {x:-s, y:s}, {x:s, y:s});
+            else if (count === 6) points.push({x:-s, y:-s}, {x:s, y:-s}, {x:-s, y:0}, {x:s, y:0}, {x:-s, y:s}, {x:s, y:s});
+            else if (count === 7) points.push({x:-s, y:-s}, {x:s, y:-s}, {x:-s, y:0}, {x:0, y:0}, {x:s, y:0}, {x:-s, y:s}, {x:s, y:s});
+            else if (count === 8) points.push({x:-s, y:-s}, {x:0, y:-s}, {x:s, y:-s}, {x:-s, y:0}, {x:s, y:0}, {x:-s, y:s}, {x:0, y:s}, {x:s, y:s});
+            else if (count === 9) points.push({x:-s, y:-s}, {x:0, y:-s}, {x:s, y:-s}, {x:-s, y:0}, {x:0, y:0}, {x:s, y:0}, {x:-s, y:s}, {x:0, y:s}, {x:s, y:s});
+            else if (count === 10) {
+                for(let i=0; i<5; i++) for(let j=0; j<2; j++) points.push({x: (i-2)*22, y: (j-0.5)*35});
+            }
+            return points;
+        }
+
+        function generateRandomPoints(count) {
+            const points = [];
+            const area = 45;
+            for(let i=0; i<count; i++) {
+                let p, overlap, attempts = 0;
+                do {
+                    overlap = false;
+                    p = { x: (Math.random() - 0.5) * area * 2, y: (Math.random() - 0.5) * area * 2 };
+                    for(let other of points) {
+                        if(Math.sqrt((p.x-other.x)**2 + (p.y-other.y)**2) < 22) overlap = true;
+                    }
+                    attempts++;
+                } while(overlap && attempts < 100);
+                points.push(p);
+            }
+            return points;
+        }
+
+        function createGroupElement(id, x, y) {
+            const container = document.createElement('div');
+            container.className = 'group-container absolute animate-pop';
+            container.style.left = x + 'px';
+            container.style.top = y + 'px';
+            container.dataset.id = id;
+            const internalPoints = layoutMode === 'dice' ? generateDicePoints(groupSize) : generateRandomPoints(groupSize);
+            renderGroupSVG(container, internalPoints);
+            container.addEventListener('mousedown', startDrag);
+            container.addEventListener('touchstart', startDrag, { passive: false });
+            document.getElementById('workspace').appendChild(container);
+            groups.push({ id, x, y, points: internalPoints });
+        }
+
+        function renderGroupSVG(container, points) {
+            const svgSize = 130;
+            let svgHtml = `<svg width="${svgSize}" height="${svgSize}" viewBox="0 0 ${svgSize} ${svgSize}">`;
+            points.forEach(p => {
+                const s = 22;
+                const px = p.x + svgSize/2;
+                const py = p.y + svgSize/2;
+                svgHtml += `<circle cx="${px}" cy="${py}" r="${s/2}" fill="${currentColor}" />`;
+            });
+            svgHtml += `</svg>`;
+            container.innerHTML = svgHtml;
+        }
+
+        function refreshAllInternalLayouts() {
+            document.querySelectorAll('.group-container').forEach((el) => {
+                const id = parseInt(el.dataset.id);
+                const g = groups.find(g => g.id === id);
+                if (g) {
+                    g.points = layoutMode === 'dice' ? generateDicePoints(groupSize) : generateRandomPoints(groupSize);
+                    renderGroupSVG(el, g.points);
+                }
+            });
+        }
+
+        function startDrag(e) {
+            e.preventDefault();
+            activeElement = e.currentTarget;
+            const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            const rect = activeElement.getBoundingClientRect();
+            offset.x = clientX - rect.left;
+            offset.y = clientY - rect.top;
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchmove', doDrag, { passive: false });
+            document.addEventListener('touchend', endDrag);
+        }
+
+        function doDrag(e) {
+            if (!activeElement) return;
+            const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+            const workspace = document.getElementById('workspace');
+            const wRect = workspace.getBoundingClientRect();
+            let newX = clientX - wRect.left - offset.x;
+            let newY = clientY - wRect.top - offset.y;
+            newX = Math.max(0, Math.min(newX, wRect.width - 120));
+            newY = Math.max(0, Math.min(newY, wRect.height - 120));
+            activeElement.style.left = newX + 'px';
+            activeElement.style.top = newY + 'px';
+            const g = groups.find(g => g.id === parseInt(activeElement.dataset.id));
+            if(g) { g.x = newX; g.y = newY; }
+        }
+
+        function endDrag() {
+            activeElement = null;
+            document.removeEventListener('mousemove', doDrag);
+            document.removeEventListener('mouseup', endDrag);
+            document.removeEventListener('touchmove', doDrag);
+            document.removeEventListener('touchend', endDrag);
+        }
+
+        function startShow() {
+            document.getElementById('setupScreen').classList.add('hidden');
+            document.getElementById('playScreen').classList.remove('hidden');
+            const canvas = document.getElementById('playCanvas');
+            canvas.innerHTML = '';
+            groups.forEach(g => {
+                const el = document.createElement('div');
+                el.className = 'absolute';
+                el.style.left = g.x + 'px';
+                el.style.top = g.y + 'px';
+                renderGroupSVG(el, g.points);
+                canvas.appendChild(el);
+            });
+            startStopwatch();
+            lucide.createIcons();
+        }
+
+        function startStopwatch() {
+            if(stopwatchInterval) clearInterval(stopwatchInterval);
+            startTime = Date.now();
+            stopwatchInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const s = Math.floor(elapsed / 1000);
+                document.getElementById('stopwatchText').innerText = `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}`;
+            }, 1000);
+        }
+
+        function hideAndAsk() {
+            clearInterval(stopwatchInterval);
+            document.getElementById('playScreen').classList.add('hidden');
+            document.getElementById('askingScreen').classList.remove('hidden');
+            document.getElementById('feedback').classList.add('hidden');
+            document.getElementById('answerInput').value = '0';
+        }
+
+        function checkAnswer() {
+            const val = parseInt(document.getElementById('answerInput').value);
+            const total = groupSize * numGroups;
+            const fb = document.getElementById('feedback');
+            fb.classList.remove('hidden');
+            if(val === total) {
+                fb.innerHTML = `מעולה! בדיוק ${total} פריטים. ✨`;
+                fb.className = "px-8 py-4 rounded-2xl font-black text-xl bg-green-50 text-green-600 animate-pop border-2 border-green-100";
+            } else {
+                fb.innerHTML = `לא בדיוק, כדאי לנסות שוב.`;
+                fb.className = "px-8 py-4 rounded-2xl font-black text-xl bg-orange-50 text-orange-600 animate-pop border-2 border-orange-100";
+            }
+        }
+
+        function showAgain() {
+            document.getElementById('askingScreen').classList.add('hidden');
+            document.getElementById('playScreen').classList.remove('hidden');
+            startStopwatch();
+        }
+
+        function resetToStart() { 
+            if(stopwatchInterval) clearInterval(stopwatchInterval);
+            document.getElementById('stopwatchText').innerText = '00:00';
+            document.getElementById('playScreen').classList.add('hidden');
+            document.getElementById('askingScreen').classList.add('hidden');
+            document.getElementById('setupScreen').classList.remove('hidden');
+            initLab();
+        }
+
+        window.onload = () => {
+            populateSelects();
+            initLab();
+        };
+    </script>
+</body>
+</html>
